@@ -21,6 +21,7 @@ npm run dev      # http://localhost:3000
 | `npm run build` | Production build           |
 | `npm start`     | Serve the production build |
 | `npm run lint`  | Run ESLint                 |
+| `npm test`      | Run the Vitest suite       |
 
 ## Routes
 

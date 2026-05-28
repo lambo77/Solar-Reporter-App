@@ -14,9 +14,13 @@ from **synthesised sample data**; there is no real data source or persistence ye
 - `npm run build` — production build (Turbopack)
 - `npm start` — serve the production build (run `build` first)
 - `npm run lint` — ESLint (flat config)
+- `npm test` — run the Vitest suite once; `npm run test:watch` for watch mode
+- Run a single file/test: `npx vitest run lib/solar-data.test.ts` or filter by name
+  with `npx vitest run -t "caps self-sufficiency"`
 
-There is no test runner configured yet. If you add tests, document the command here,
-including how to run a single test.
+Tests live next to the code as `*.test.ts` and cover the pure logic in `lib/` (the
+sample-data generator's determinism and the `summarise` aggregations). Vitest resolves
+the `@/*` alias via `vitest.config.ts`.
 
 ## Architecture
 
