@@ -3,168 +3,141 @@ import { useState, useMemo } from 'react'
 import { MobileShell } from '@/components/layout/MobileShell'
 import { TopBar } from '@/components/layout/TopBar'
 import { BottomNav } from '@/components/layout/BottomNav'
-import { PeriodToggle } from '@/components/energy/PeriodToggle'
-import { CustomDatePanel } from '@/components/energy/CustomDatePanel'
-import { EnergyChart } from '@/components/energy/EnergyChart'
-import { EnergyStatCard } from '@/components/energy/EnergyStatCard'
+import { CostChart } from '@/components/energy/CostChart'
 import { useInverterList } from '@/hooks/useInverterList'
-import { useInverterDay } from '@/hooks/useInverterDay'
 import { useInverterMonth } from '@/hooks/useInverterMonth'
-import { useInverterYear } from '@/hooks/useInverterYear'
 import { useTariffs } from '@/hooks/useTariffs'
-import { useBillingCycle } from '@/hooks/useBillingCycle'
-import { calcPreciseDailyCost, calcImportCost, calcExportRevenue } from '@/lib/tariffs/calculator'
-import { monthsInRange, formatBillingCycleLabel } from '@/lib/utils/billing-cycle'
-import { formatDateIso, formatMonth, formatYear } from '@/lib/utils/formatters'
-import type { EnergyPeriod } from '@/types'
+import { calcBlendedImportRate } from '@/lib/tariffs/calculator'
+import { formatDateIso } from '@/lib/utils/formatters'
 
-export default function EnergyPage() {
-  const [period, setPeriod] = useState<EnergyPeriod>('day')
-  const today = formatDateIso(new Date())
-  const [selectedDate, setSelectedDate] = useState(today)
-  const [selectedMonth, setSelectedMonth] = useState(formatMonth(new Date()))
-  const [selectedYear, setSelectedYear] = useState(formatYear(new Date()))
-  const [customFrom, setCustomFrom] = useState(today)
-  const [customTo, setCustomTo] = useState(today)
+function toYearMonth(dateStr: string) {
+  return dateStr.slice(0, 7) // 'YYYY-MM'
+}
 
-  const { tariffs } = useTariffs()
-  const { cycle, prev, next } = useBillingCycle(tariffs.billingCycleStartDay)
-  const { inverters } = useInverterList()
-  const inv = inverters[0]
+function monthsBetween(from: string, to: string): string[] {
+  const result: string[] = []
+  const start = new Date(from + '-01')
+  const end   = new Date(to   + '-01')
+  while (start <= end && result.length < 3) {
+    const y = start.getFullYear()
+    const m = String(start.getMonth() + 1).padStart(2, '0')
+    result.push(`${y}-${m}`)
+    start.setMonth(start.getMonth() + 1)
+  }
+  return result
+}
 
-  const { points: dayPoints } = useInverterDay(inv?.id ?? '', inv?.sn ?? '', selectedDate)
-  const { points: monthPoints } = useInverterMonth(inv?.id ?? '', inv?.sn ?? '', selectedMonth)
-  const { points: yearPoints } = useInverterYear(inv?.id ?? '', inv?.sn ?? '', selectedYear)
+function SummaryCard({ label, value, color }: { label: string; value: string; color: string }) {
+  return (
+    <div className="flex-1 bg-slate-800 rounded-2xl border border-slate-700 p-3 text-center">
+      <p className="text-[10px] text-slate-400 uppercase tracking-wide">{label}</p>
+      <p className={`text-base font-bold mt-1 ${color}`}>{value}</p>
+    </div>
+  )
+}
 
-  // Custom range: fetch months that overlap the range, filter by date
-  const customMonths = useMemo(() => {
-    if (period !== 'custom') return []
-    return monthsInRange({ from: new Date(customFrom), to: new Date(customTo) })
-  }, [period, customFrom, customTo])
+export default function ReportingPage() {
+  const today        = formatDateIso(new Date())
+  const thirtyAgo    = formatDateIso(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
 
-  // For simplicity, custom range uses the last fetched month points filtered to date range
-  // (In production each month would be fetched individually)
-  const customPoints = useMemo(() => {
-    if (!customMonths.length) return []
-    return monthPoints.filter((p) => p.dateStr >= customFrom && p.dateStr <= customTo)
-  }, [monthPoints, customFrom, customTo, customMonths])
+  const [fromDate, setFromDate] = useState(thirtyAgo)
+  const [toDate,   setToDate]   = useState(today)
 
-  const chartPoints = useMemo(() => {
-    if (period === 'day') {
-      return dayPoints.map((p, i) => {
-        const prev = dayPoints[i - 1]
-        return {
-          label: p.timeStr.slice(0, 5),
-          generation: p.eToday - (prev?.eToday ?? 0),
-          import: p.gridPurchasedEnergy - (prev?.gridPurchasedEnergy ?? 0),
-          export: p.gridSellEnergy - (prev?.gridSellEnergy ?? 0),
-          load: p.homeLoadEnergy - (prev?.homeLoadEnergy ?? 0),
-        }
-      })
-    }
-    if (period === 'month') {
-      return monthPoints.map((p) => ({
-        label: p.dateStr.slice(8),
-        generation: p.energy,
-        import: p.gridPurchasedEnergy,
-        export: p.gridSellEnergy,
-        load: p.homeLoadEnergy,
-      }))
-    }
-    if (period === 'year') {
-      return yearPoints.map((p) => ({
-        label: p.dateStr.slice(5),
-        generation: p.energy,
-        import: p.gridPurchasedEnergy,
-        export: p.gridSellEnergy,
-        load: p.homeLoadEnergy,
-      }))
-    }
-    return customPoints.map((p) => ({
-      label: p.dateStr.slice(5),
-      generation: p.energy,
-      import: p.gridPurchasedEnergy,
-      export: p.gridSellEnergy,
-      load: p.homeLoadEnergy,
+  const { tariffs }    = useTariffs()
+  const { inverters }  = useInverterList()
+  const inv            = inverters[0]
+
+  const months = useMemo(
+    () => monthsBetween(toYearMonth(fromDate), toYearMonth(toDate)),
+    [fromDate, toDate],
+  )
+
+  const { points: m0 } = useInverterMonth(inv?.id ?? '', inv?.sn ?? '', months[0] ?? '')
+  const { points: m1 } = useInverterMonth(inv?.id ?? '', inv?.sn ?? '', months[1] ?? '')
+  const { points: m2 } = useInverterMonth(inv?.id ?? '', inv?.sn ?? '', months[2] ?? '')
+
+  const blendedRate = calcBlendedImportRate(tariffs.importTariffs)
+
+  const days = useMemo(() => {
+    const all = [...m0, ...m1, ...m2].filter(
+      (p) => p.dateStr >= fromDate && p.dateStr <= toDate,
+    )
+    all.sort((a, b) => a.dateStr.localeCompare(b.dateStr))
+    return all.map((p) => ({
+      label:   p.dateStr.slice(5),
+      cost:    p.gridPurchasedEnergy * blendedRate,
+      revenue: p.gridSellEnergy * tariffs.exportRate,
     }))
-  }, [period, dayPoints, monthPoints, yearPoints, customPoints])
+  }, [m0, m1, m2, fromDate, toDate, blendedRate, tariffs.exportRate])
 
-  const totals = useMemo(() => {
-    const pts = chartPoints
-    return {
-      gen:    pts.reduce((s, p) => s + p.generation, 0),
-      imp:    pts.reduce((s, p) => s + p.import, 0),
-      exp:    pts.reduce((s, p) => s + p.export, 0),
-      load:   pts.reduce((s, p) => s + p.load, 0),
-    }
-  }, [chartPoints])
-
-  const importCost = period === 'day'
-    ? calcPreciseDailyCost(dayPoints, tariffs.importTariffs)
-    : calcImportCost(totals.imp, tariffs)
-  const exportRevenue = calcExportRevenue(totals.exp, tariffs)
+  const totalCost    = days.reduce((s, d) => s + d.cost, 0)
+  const totalRevenue = days.reduce((s, d) => s + d.revenue, 0)
+  const net          = totalCost - totalRevenue
 
   return (
     <MobileShell>
-      <TopBar title="Energy" />
+      <TopBar title="Reporting" />
 
-      <div className="flex-1 overflow-y-auto py-4 space-y-3">
-        <PeriodToggle value={period} onChange={setPeriod} />
+      <div className="flex-1 overflow-y-auto py-4 space-y-4 px-3">
 
-        {period === 'day' && (
-          <div className="px-3">
-            <input type="date" value={selectedDate} max={today}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700" />
-          </div>
-        )}
-        {period === 'month' && (
-          <div className="px-3">
-            <input type="month" value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700" />
-          </div>
-        )}
-        {period === 'year' && (
-          <div className="px-3">
-            <input type="number" value={selectedYear} min="2020" max={new Date().getFullYear()}
-              onChange={(e) => setSelectedYear(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700" />
-          </div>
-        )}
-        {period === 'custom' && (
-          <>
-            <CustomDatePanel
-              cycle={cycle}
-              from={customFrom}
-              to={customTo}
-              onFromChange={setCustomFrom}
-              onToChange={setCustomTo}
-              onPrev={prev}
-              onNext={next}
-              onApplyCycle={() => {
-                setCustomFrom(formatDateIso(cycle.from))
-                setCustomTo(formatDateIso(cycle.to))
-              }}
-            />
-            <div className="px-3">
-              <span className="inline-block bg-gray-100 text-gray-600 text-xs rounded-full px-3 py-1">
-                {formatBillingCycleLabel({ from: new Date(customFrom), to: new Date(customTo) })}
-              </span>
+        {/* Date range pickers */}
+        <div className="bg-slate-800 rounded-2xl border border-slate-700 p-4 space-y-3">
+          <p className="text-xs text-slate-400 uppercase tracking-wide">Date range</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-slate-500 uppercase tracking-wide">From</label>
+              <input
+                type="date"
+                value={fromDate}
+                max={toDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                className="bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500"
+              />
             </div>
-          </>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-slate-500 uppercase tracking-wide">To</label>
+              <input
+                type="date"
+                value={toDate}
+                min={fromDate}
+                max={today}
+                onChange={(e) => setToDate(e.target.value)}
+                className="bg-slate-700 border border-slate-600 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Bar chart */}
+        {days.length > 0 ? (
+          <CostChart days={days} />
+        ) : (
+          <div className="bg-slate-800 rounded-2xl border border-slate-700 p-8 text-center">
+            <p className="text-slate-500 text-sm">No data for selected range</p>
+          </div>
         )}
 
-        {chartPoints.length > 0 && <EnergyChart points={chartPoints} />}
+        {/* Summary totals */}
+        {days.length > 0 && (
+          <div className="flex gap-2">
+            <SummaryCard
+              label="Import cost"
+              value={`€${totalCost.toFixed(2)}`}
+              color="text-red-400"
+            />
+            <SummaryCard
+              label="Export revenue"
+              value={`€${totalRevenue.toFixed(2)}`}
+              color="text-emerald-400"
+            />
+            <SummaryCard
+              label="Net cost"
+              value={`€${net.toFixed(2)}`}
+              color={net > 0 ? 'text-red-400' : 'text-emerald-400'}
+            />
+          </div>
+        )}
 
-        <div className="grid grid-cols-2 gap-3 px-3">
-          <EnergyStatCard label="Generation" kwh={totals.gen} valueColor="text-amber-600" />
-          <EnergyStatCard label="Import" kwh={totals.imp} valueColor="text-blue-600"
-            cost={importCost} costColor="red" currencySymbol={tariffs.currencySymbol} />
-          <EnergyStatCard label="Export" kwh={totals.exp} valueColor="text-green-600"
-            cost={exportRevenue} costColor="green" currencySymbol={tariffs.currencySymbol} />
-          <EnergyStatCard label="Home load" kwh={totals.load} valueColor="text-purple-600" />
-        </div>
       </div>
 
       <BottomNav />

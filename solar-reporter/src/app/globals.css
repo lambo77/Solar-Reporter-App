@@ -3,15 +3,8 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --background: #0f172a;
+  --foreground: #f1f5f9;
 }
 
 body {
@@ -24,4 +17,30 @@ body {
   .text-balance {
     text-wrap: balance;
   }
+}
+
+/* Power flow connector animations */
+@keyframes flowDown {
+  0%   { top: -4px;              opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { top: calc(100% + 4px);  opacity: 0; }
+}
+@keyframes flowUp {
+  0%   { bottom: -4px;              opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { bottom: calc(100% + 4px);  opacity: 0; }
+}
+@keyframes flowRight {
+  0%   { left: -4px;              opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { left: calc(100% + 4px);  opacity: 0; }
+}
+@keyframes flowLeft {
+  0%   { right: -4px;              opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { right: calc(100% + 4px);  opacity: 0; }
 }
