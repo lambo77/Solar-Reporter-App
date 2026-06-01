@@ -33,7 +33,7 @@ export interface SystemConfig {
 
 export const SYSTEM_CONFIG: SystemConfig = {
   capacityKwp: 50,
-  siteName: "Kepak Solar Array",
+  siteName: "Solar Reporter",
   co2PerKwh: 0.233,
   pricePerKwh: 0.34,
 };

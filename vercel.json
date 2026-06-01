@@ -1,0 +1,6 @@
+{
+  "buildCommand": "cd solar-reporter && npm install && npm run build",
+  "outputDirectory": "solar-reporter/.next",
+  "installCommand": "cd solar-reporter && npm install",
+  "framework": "nextjs"
+}
