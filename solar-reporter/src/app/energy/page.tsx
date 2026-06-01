@@ -51,13 +51,16 @@ export default function EnergyPage() {
 
   const chartPoints = useMemo(() => {
     if (period === 'day') {
-      return dayPoints.map((p) => ({
-        label: p.timeStr.slice(0, 5),
-        generation: p.eToday,
-        import: p.gridPurchasedEnergy,
-        export: p.gridSellEnergy,
-        load: p.homeLoadEnergy,
-      }))
+      return dayPoints.map((p, i) => {
+        const prev = dayPoints[i - 1]
+        return {
+          label: p.timeStr.slice(0, 5),
+          generation: p.eToday - (prev?.eToday ?? 0),
+          import: p.gridPurchasedEnergy - (prev?.gridPurchasedEnergy ?? 0),
+          export: p.gridSellEnergy - (prev?.gridSellEnergy ?? 0),
+          load: p.homeLoadEnergy - (prev?.homeLoadEnergy ?? 0),
+        }
+      })
     }
     if (period === 'month') {
       return monthPoints.map((p) => ({
