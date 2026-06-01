@@ -1,55 +1,116 @@
 'use client'
+import { Sun, BatteryCharging, Battery, Zap, Home } from 'lucide-react'
 import type { InverterSummary } from '@/lib/solis/types'
+import { FlowNode } from './FlowNode'
+import { formatRelativeMinutes } from '@/lib/utils/formatters'
 
-interface Props {
-  inverter: InverterSummary
-}
-
-function FlowArrow({ active, color }: { active: boolean; color: string }) {
+function VLine({ active, dotClass, direction }: { active: boolean; dotClass: string; direction: 'down' | 'up' }) {
   return (
-    <div className={`h-0.5 flex-1 mx-1 ${active ? color : 'bg-gray-700'} relative overflow-hidden`}>
+    <div className="relative w-0.5 h-10 bg-slate-700 mx-auto my-1">
       {active && (
-        <div className="absolute inset-0 animate-pulse opacity-75" style={{ background: 'inherit' }} />
+        <span
+          className={`absolute -left-[3px] w-2 h-2 rounded-full ${dotClass}`}
+          style={{ animation: `${direction === 'down' ? 'flowDown' : 'flowUp'} 1.4s linear infinite` }}
+        />
       )}
     </div>
   )
 }
 
-function Node({ label, value, sub, color }: { label: string; value: string; sub?: string; color: string }) {
+function HLine({ active, dotClass, reverse }: { active: boolean; dotClass: string; reverse: boolean }) {
   return (
-    <div className={`flex flex-col items-center justify-center rounded-lg p-2 w-[72px] border ${color}`}>
-      <span className="text-[9px] text-gray-400 uppercase tracking-wide leading-none mb-1">{label}</span>
-      <span className="text-white text-xs font-semibold leading-none">{value}</span>
-      {sub && <span className="text-[9px] text-gray-400 mt-0.5 leading-none">{sub}</span>}
+    <div className="relative h-0.5 flex-1 bg-slate-700 mx-1">
+      {active && (
+        <span
+          className={`absolute -top-[3px] w-2 h-2 rounded-full ${dotClass}`}
+          style={{ animation: `${reverse ? 'flowLeft' : 'flowRight'} 1.4s linear infinite` }}
+        />
+      )}
     </div>
   )
 }
 
-export function PowerFlowDiagram({ inverter }: Props) {
-  const solarActive = inverter.pac > 0
-  const exportActive = inverter.gridSellTodayEnergy > 0
-  const importActive = inverter.pSum > 0
-  const batteryCharging = inverter.batteryPower > 0
-  const batteryDischarging = inverter.batteryPower < 0
+export function PowerFlowDiagram({ inverter }: { inverter: InverterSummary }) {
+  const solarKw  = inverter.pac ?? 0
+  const battKw   = inverter.batteryPower ?? 0
+  const gridKw   = inverter.pSum ?? 0
+  const homeKw   = inverter.familyLoadPower ?? 0
+
+  const solarActive   = solarKw > 0.01
+  const battActive    = Math.abs(battKw) > 0.01
+  const battCharging  = battKw > 0       // positive = charging (inverter → battery)
+  const gridActive    = Math.abs(gridKw) > 0.01
+  const gridImporting = gridKw > 0       // positive = importing (grid → inverter)
+  const homeActive    = homeKw > 0.01
 
   return (
-    <div className="bg-[#1a1a2e] rounded-xl p-3 mx-3">
-      {/* Row 1: Solar → Inverter → Export */}
-      <div className="flex items-center mb-3">
-        <Node label="Solar PV" value={`${inverter.pac.toFixed(1)}kW`} sub={`${inverter.etoday.toFixed(1)}kWh`} color="border-amber-500/40" />
-        <FlowArrow active={solarActive} color="bg-amber-400" />
-        <Node label="Inverter" value={`${inverter.pac.toFixed(1)}kW`} color="border-gray-500/40" />
-        <FlowArrow active={exportActive} color="bg-green-400" />
-        <Node label="Export" value={`${inverter.gridSellTodayEnergy.toFixed(1)}kWh`} color="border-green-500/40" />
+    <div className="rounded-2xl bg-slate-800 border border-slate-700 p-4">
+
+      {/* Solar — top */}
+      <div className="flex justify-center">
+        <FlowNode
+          Icon={Sun} label="Solar PV"
+          kw={solarKw} kwh={inverter.etoday ?? 0}
+          colorClass="amber" active={solarActive}
+        />
       </div>
 
-      {/* Row 2: Import → Home / Battery */}
-      <div className="flex items-center">
-        <Node label="Import" value={`${inverter.gridPurchasedTodayEnergy.toFixed(1)}kWh`} color="border-blue-500/40" />
-        <FlowArrow active={importActive} color="bg-blue-400" />
-        <Node label="Home" value={`${inverter.familyLoadPower.toFixed(1)}kW`} sub={`${inverter.homeLoadTodayEnergy.toFixed(1)}kWh`} color="border-purple-500/40" />
-        <FlowArrow active={batteryCharging || batteryDischarging} color={batteryCharging ? 'bg-orange-400' : 'bg-orange-300'} />
-        <Node label="Battery" value={`${inverter.batteryCapacitySoc.toFixed(0)}%`} sub={`${Math.abs(inverter.batteryPower).toFixed(1)}kW`} color="border-orange-500/40" />
+      {/* Solar → Inverter connector */}
+      <VLine active={solarActive} dotClass="bg-amber-400" direction="down" />
+
+      {/* Middle row: Battery — Inverter — Grid */}
+      <div className="flex items-center justify-between">
+        <FlowNode
+          Icon={battKw > 0 ? BatteryCharging : Battery}
+          label="Battery"
+          kw={Math.abs(battKw)}
+          colorClass="emerald"
+          active={battActive}
+          pill={`${(inverter.batteryCapacitySoc ?? 0).toFixed(0)}% SOC`}
+        />
+
+        {/* Battery ↔ Inverter: charging = power flows right→left (reverse); discharging = left→right */}
+        <HLine active={battActive} dotClass="bg-emerald-400" reverse={battCharging} />
+
+        {/* Inverter centre */}
+        <div className="flex flex-col items-center justify-center rounded-2xl bg-slate-700 border border-slate-600 px-3 py-3 min-w-[68px]">
+          <span className="text-[9px] text-slate-400 uppercase tracking-widest font-semibold">Inverter</span>
+          {inverter.stationName ? (
+            <span className="text-[8px] text-slate-500 mt-1 text-center leading-tight max-w-[60px] truncate">
+              {inverter.stationName}
+            </span>
+          ) : null}
+          <span className="text-[8px] text-slate-600 mt-1 leading-none">
+            {formatRelativeMinutes(inverter.dataTimestamp)}
+          </span>
+        </div>
+
+        {/* Inverter ↔ Grid: importing = power flows right→left (reverse); exporting = left→right */}
+        <HLine active={gridActive} dotClass="bg-blue-400" reverse={gridImporting} />
+
+        <FlowNode
+          Icon={Zap}
+          label="Grid"
+          kw={Math.abs(gridKw)}
+          kwh={inverter.gridPurchasedTodayEnergy ?? 0}
+          kwhLabel="kWh in"
+          kwh2={inverter.gridSellTodayEnergy ?? 0}
+          kwh2Label="kWh out"
+          colorClass="blue"
+          active={gridActive}
+        />
+      </div>
+
+      {/* Inverter → Home connector */}
+      <VLine active={homeActive} dotClass="bg-violet-400" direction="down" />
+
+      {/* Home — bottom */}
+      <div className="flex justify-center">
+        <FlowNode
+          Icon={Home} label="Home"
+          kw={homeKw} kwh={inverter.homeLoadTodayEnergy ?? 0}
+          colorClass="violet" active={homeActive}
+        />
       </div>
     </div>
   )
