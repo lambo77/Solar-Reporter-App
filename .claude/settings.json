@@ -1,0 +1,29 @@
+{
+  "enabledPlugins": {
+    "frontend-design@claude-plugins-official": true
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd solar-reporter && npx tsc --noEmit 2>&1 | head -20; exit 0"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{const fp=JSON.parse(d).file_path||'';process.exit(fp.includes('.env.local')?2:0)}catch(e){process.exit(0)}})\""
+          }
+        ]
+      }
+    ]
+  }
+}
